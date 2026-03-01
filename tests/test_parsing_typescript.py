@@ -177,6 +177,149 @@ class TestExtractOtherKinds:
         assert syms["VERSION"].kind == "variable"
 
 
+class TestLocalExportClause:
+    """Symbols declared without `export` but re-exported via `export { A, B }` are extracted."""
+
+    def setup_method(self):
+        import json
+        pkg_json = FIXTURES_DTS / "package.json"
+        pkg_json.write_text(json.dumps({"name": "mylib", "version": "1.0.0", "types": "declarations.d.ts"}))
+        self.extractor = TypeScriptExtractor()
+        self.dep = make_dep("mylib", FIXTURES_DTS)
+
+    def teardown_method(self):
+        pkg_json = FIXTURES_DTS / "package.json"
+        if pkg_json.exists():
+            pkg_json.unlink()
+
+    def _syms_by_name(self):
+        return {s.name: s for s in self.extractor.extract(self.dep)}
+
+    def test_extracts_interface_via_export_clause(self):
+        syms = self._syms_by_name()
+        assert "ServerOptions" in syms
+        assert syms["ServerOptions"].kind == "interface"
+
+    def test_extracts_type_via_export_clause(self):
+        syms = self._syms_by_name()
+        assert "LogLevel" in syms
+        assert syms["LogLevel"].kind == "type"
+
+    def test_extracts_class_via_export_clause(self):
+        syms = self._syms_by_name()
+        assert "Server" in syms
+        assert syms["Server"].kind == "class"
+
+    def test_extracts_function_via_export_clause(self):
+        syms = self._syms_by_name()
+        assert "createServer" in syms
+        assert syms["createServer"].kind == "function"
+
+    def test_jsdoc_preserved_for_export_clause_symbol(self):
+        syms = self._syms_by_name()
+        assert syms["ServerOptions"].docstring is not None
+        assert "Creates a server" in syms["ServerOptions"].docstring
+
+    def test_fqn_uses_dep_name(self):
+        syms = self._syms_by_name()
+        assert syms["Server"].fqn == "mylib:Server"
+
+
+class TestBarrelReExports:
+    """Symbols re-exported via `export { X } from './file'` and `export * from './file'` are followed."""
+
+    def setup_method(self):
+        import json
+        pkg_json = FIXTURES_DTS / "package.json"
+        pkg_json.write_text(json.dumps({"name": "mylib", "version": "1.0.0", "types": "barrel.d.ts"}))
+        self.extractor = TypeScriptExtractor()
+        self.dep = make_dep("mylib", FIXTURES_DTS)
+
+    def teardown_method(self):
+        pkg_json = FIXTURES_DTS / "package.json"
+        if pkg_json.exists():
+            pkg_json.unlink()
+
+    def _syms_by_name(self):
+        return {s.name: s for s in self.extractor.extract(self.dep)}
+
+    def test_follows_named_reexport(self):
+        """export { Server, createServer } from './declarations' is followed."""
+        syms = self._syms_by_name()
+        assert "Server" in syms
+        assert "createServer" in syms
+
+    def test_follows_star_reexport(self):
+        """export * from './utils' is followed."""
+        syms = self._syms_by_name()
+        assert "formatDate" in syms
+        assert "slugify" in syms
+        assert "FormatOptions" in syms
+
+    def test_no_duplicate_symbols(self):
+        """Visited set prevents the same file being processed twice."""
+        all_syms = self.extractor.extract(self.dep)
+        names = [s.name for s in all_syms]
+        assert len(names) == len(set(names))
+
+    def test_fqn_uses_dep_name(self):
+        syms = self._syms_by_name()
+        assert syms["formatDate"].fqn == "mylib:formatDate"
+
+
+class TestAmbientModules:
+    """Symbols inside `declare module '...' { ... }` blocks are extracted."""
+
+    def setup_method(self):
+        import json
+        pkg_json = FIXTURES_DTS / "package.json"
+        pkg_json.write_text(json.dumps({"name": "myambient", "version": "2.0.0", "types": "ambient.d.ts"}))
+        self.extractor = TypeScriptExtractor()
+        self.dep = make_dep("myambient", FIXTURES_DTS, version="2.0.0")
+
+    def teardown_method(self):
+        pkg_json = FIXTURES_DTS / "package.json"
+        if pkg_json.exists():
+            pkg_json.unlink()
+
+    def _syms_by_name(self):
+        return {s.name: s for s in self.extractor.extract(self.dep)}
+
+    def test_extracts_function_from_ambient_module(self):
+        syms = self._syms_by_name()
+        assert "mount" in syms
+        assert syms["mount"].kind == "function"
+
+    def test_extracts_multiple_functions_from_ambient_module(self):
+        syms = self._syms_by_name()
+        assert "unmount" in syms
+
+    def test_extracts_interface_from_ambient_module(self):
+        syms = self._syms_by_name()
+        assert "MountOptions" in syms
+        assert syms["MountOptions"].kind == "interface"
+
+    def test_extracts_type_from_ambient_module(self):
+        syms = self._syms_by_name()
+        assert "ComponentType" in syms
+        assert syms["ComponentType"].kind == "type"
+
+    def test_jsdoc_preserved_in_ambient_module(self):
+        syms = self._syms_by_name()
+        assert syms["mount"].docstring is not None
+        assert "Mounts" in syms["mount"].docstring
+
+    def test_extracts_symbols_from_multiple_ambient_modules(self):
+        """Both `declare module 'myambient'` and `declare module 'myambient/utils'` are traversed."""
+        syms = self._syms_by_name()
+        assert "noop" in syms
+        assert "VERSION" in syms
+
+    def test_fqn_uses_dep_name(self):
+        syms = self._syms_by_name()
+        assert syms["mount"].fqn == "myambient:mount"
+
+
 class TestEntryResolution:
     def setup_method(self):
         self.extractor = TypeScriptExtractor()
@@ -194,6 +337,15 @@ class TestEntryResolution:
         assert self.extractor.can_extract(dep) is True
         symbols = self.extractor.extract(dep)
         assert len(symbols) > 0
+
+    def test_resolves_exports_map_types_field(self):
+        """Package with only exports['.']['types'] — no top-level types/typings field."""
+        dep = make_dep("exports-only", NODE_FIXTURES / "exports-only", version="1.0.0")
+        assert self.extractor.can_extract(dep) is True
+        symbols = self.extractor.extract(dep)
+        names = {s.name for s in symbols}
+        assert "greet" in names
+        assert "Greeting" in names
 
     def test_returns_empty_for_no_dts(self):
         dep = make_dep("typescript", NODE_FIXTURES / "typescript")
