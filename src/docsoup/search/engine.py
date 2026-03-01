@@ -67,7 +67,7 @@ class SearchEngine:
         for dep in deps:
             if not force and self._index.is_library_indexed(dep.name, dep.version):
                 logger.debug("Skipping %s@%s (already indexed)", dep.name, dep.version)
-                report.skipped.append(dep.name)
+                report.already_indexed.append(dep.name)
                 continue
 
             extractor = self._find_extractor(dep)
