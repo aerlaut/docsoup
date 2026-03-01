@@ -11,6 +11,7 @@ import click
 
 from docsoup.discovery.node import NodeDiscoverer
 from docsoup.indexing.sqlite_index import SqliteIndex
+from docsoup.parsing.javascript import JavaScriptExtractor
 from docsoup.parsing.typescript import TypeScriptExtractor
 from docsoup.search.engine import SearchEngine
 
@@ -23,7 +24,7 @@ def _make_engine(project_root: Path) -> SearchEngine:
     db_path = project_root / ".docsoup" / "index.db"
     return SearchEngine(
         discoverer=NodeDiscoverer(),
-        extractors=[TypeScriptExtractor()],
+        extractors=[TypeScriptExtractor(), JavaScriptExtractor()],
         index=SqliteIndex(db_path=db_path),
     )
 
@@ -64,8 +65,9 @@ def cli(verbose: bool) -> None:
 def index_cmd(project_root: str, force: bool, output_json: bool) -> None:
     """Index all dependencies of PROJECT_ROOT.
 
-    Reads package.json, resolves node_modules, extracts TypeScript symbols,
-    and stores them in .docsoup/index.db inside PROJECT_ROOT.
+    Reads package.json, resolves node_modules, extracts symbols from TypeScript
+    declaration files (.d.ts) or JavaScript source files, and stores them in
+    .docsoup/index.db inside PROJECT_ROOT.
 
     \b
     Examples:
@@ -90,7 +92,7 @@ def index_cmd(project_root: str, force: bool, output_json: bool) -> None:
         for name in report.indexed:
             click.echo(f"  • {name}")
     if report.skipped:
-        click.echo(f"↷ Skipped (already indexed or no .d.ts):")
+        click.echo(f"↷ Skipped (already indexed or no extractable source):")
         for name in report.skipped:
             click.echo(f"  • {name}")
     if report.failed:
