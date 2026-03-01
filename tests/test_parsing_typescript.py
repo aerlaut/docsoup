@@ -177,6 +177,59 @@ class TestExtractOtherKinds:
         assert syms["VERSION"].kind == "variable"
 
 
+class TestAmbientModules:
+    """Symbols inside `declare module '...' { ... }` blocks are extracted."""
+
+    def setup_method(self):
+        import json
+        pkg_json = FIXTURES_DTS / "package.json"
+        pkg_json.write_text(json.dumps({"name": "myambient", "version": "2.0.0", "types": "ambient.d.ts"}))
+        self.extractor = TypeScriptExtractor()
+        self.dep = make_dep("myambient", FIXTURES_DTS, version="2.0.0")
+
+    def teardown_method(self):
+        pkg_json = FIXTURES_DTS / "package.json"
+        if pkg_json.exists():
+            pkg_json.unlink()
+
+    def _syms_by_name(self):
+        return {s.name: s for s in self.extractor.extract(self.dep)}
+
+    def test_extracts_function_from_ambient_module(self):
+        syms = self._syms_by_name()
+        assert "mount" in syms
+        assert syms["mount"].kind == "function"
+
+    def test_extracts_multiple_functions_from_ambient_module(self):
+        syms = self._syms_by_name()
+        assert "unmount" in syms
+
+    def test_extracts_interface_from_ambient_module(self):
+        syms = self._syms_by_name()
+        assert "MountOptions" in syms
+        assert syms["MountOptions"].kind == "interface"
+
+    def test_extracts_type_from_ambient_module(self):
+        syms = self._syms_by_name()
+        assert "ComponentType" in syms
+        assert syms["ComponentType"].kind == "type"
+
+    def test_jsdoc_preserved_in_ambient_module(self):
+        syms = self._syms_by_name()
+        assert syms["mount"].docstring is not None
+        assert "Mounts" in syms["mount"].docstring
+
+    def test_extracts_symbols_from_multiple_ambient_modules(self):
+        """Both `declare module 'myambient'` and `declare module 'myambient/utils'` are traversed."""
+        syms = self._syms_by_name()
+        assert "noop" in syms
+        assert "VERSION" in syms
+
+    def test_fqn_uses_dep_name(self):
+        syms = self._syms_by_name()
+        assert syms["mount"].fqn == "myambient:mount"
+
+
 class TestEntryResolution:
     def setup_method(self):
         self.extractor = TypeScriptExtractor()

@@ -121,10 +121,17 @@ class TypeScriptExtractor(SymbolExtractor):
             if node.type == "export_statement":
                 self._handle_export(node, source, dep, rel_path, symbols, preceding_comment)
             elif node.type == "module":
-                # declare module "..." { ... } — recurse into body
+                # bare module "..." { ... } — recurse into body
                 body = _child_of_type(node, "statement_block")
                 if body:
                     self._walk_program(body, source, dep, rel_path, symbols)
+            elif node.type == "ambient_declaration":
+                # `declare module '...' { ... }` — unwrap and recurse
+                inner_module = _child_of_type(node, "module")
+                if inner_module:
+                    body = _child_of_type(inner_module, "statement_block")
+                    if body:
+                        self._walk_program(body, source, dep, rel_path, symbols)
 
     # ------------------------------------------------------------------
     # Export handling
