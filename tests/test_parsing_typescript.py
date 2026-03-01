@@ -195,6 +195,15 @@ class TestEntryResolution:
         symbols = self.extractor.extract(dep)
         assert len(symbols) > 0
 
+    def test_resolves_exports_map_types_field(self):
+        """Package with only exports['.']['types'] — no top-level types/typings field."""
+        dep = make_dep("exports-only", NODE_FIXTURES / "exports-only", version="1.0.0")
+        assert self.extractor.can_extract(dep) is True
+        symbols = self.extractor.extract(dep)
+        names = {s.name for s in symbols}
+        assert "greet" in names
+        assert "Greeting" in names
+
     def test_returns_empty_for_no_dts(self):
         dep = make_dep("typescript", NODE_FIXTURES / "typescript")
         symbols = self.extractor.extract(dep)

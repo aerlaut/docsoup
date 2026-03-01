@@ -226,20 +226,41 @@ class TypeScriptExtractor(SymbolExtractor):
 
     @staticmethod
     def _find_dts_entry(dep: Dependency) -> Path | None:
-        """Find the primary .d.ts entry point for the dependency."""
+        """Find the primary .d.ts entry point for the dependency.
+
+        Resolution order:
+        1. ``types`` field in package.json
+        2. ``typings`` field in package.json
+        3. ``exports["."]["types"]`` conditional export in package.json
+        4. ``index.d.ts`` in the package root
+        """
         pkg_json = dep.path / "package.json"
         if pkg_json.exists():
             try:
                 meta = json.loads(pkg_json.read_text(encoding="utf-8"))
+
+                # 1 & 2: top-level types / typings fields
                 for field in ("types", "typings"):
                     if field in meta and meta[field]:
                         candidate = dep.path / meta[field]
                         if candidate.exists():
                             return candidate
+
+                # 3: exports map — exports["."]["types"]
+                exports = meta.get("exports")
+                if isinstance(exports, dict):
+                    dot_export = exports.get(".")
+                    if isinstance(dot_export, dict):
+                        types_path = dot_export.get("types")
+                        if types_path:
+                            candidate = dep.path / types_path
+                            if candidate.exists():
+                                return candidate
+
             except (json.JSONDecodeError, OSError):
                 pass
 
-        # Fall back to index.d.ts
+        # 4: fall back to index.d.ts
         fallback = dep.path / "index.d.ts"
         if fallback.exists():
             return fallback
