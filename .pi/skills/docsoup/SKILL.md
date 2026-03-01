@@ -12,13 +12,7 @@ Search the indexed API surface and type definitions of a project's npm dependenc
 Install docsoup into the active Python environment (run once per machine):
 
 ```bash
-pip install -e /path/to/docsoup
-```
-
-Or if working inside the docsoup repo:
-
-```bash
-cd /Users/aerlaut/Projects/docsoup && pip install -e .
+pip install git+https://github.com/aerlaut/docsoup@main
 ```
 
 Verify installation:

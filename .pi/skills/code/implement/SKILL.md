@@ -1,6 +1,6 @@
 ---
 name: implement
-description: Implement changes according to a plan
+description: Implement changes according to a plan.
 ---
 
 # Implement
