@@ -62,18 +62,36 @@ class TestIndexReport:
     def test_defaults(self):
         report = IndexReport()
         assert report.indexed == []
+        assert report.already_indexed == []
         assert report.skipped == []
         assert report.failed == []
         assert report.total_symbols == 0
 
+    def test_already_indexed_field(self):
+        report = IndexReport(already_indexed=["react", "express"])
+        assert report.already_indexed == ["react", "express"]
+        assert report.skipped == []
+
+    def test_skipped_field(self):
+        report = IndexReport(skipped=["some-css-pkg"])
+        assert report.skipped == ["some-css-pkg"]
+        assert report.already_indexed == []
+
+    def test_already_indexed_and_skipped_are_independent(self):
+        report = IndexReport(already_indexed=["react"], skipped=["some-css-pkg"])
+        assert report.already_indexed == ["react"]
+        assert report.skipped == ["some-css-pkg"]
+
     def test_with_data(self):
         report = IndexReport(
-            indexed=["react", "express"],
-            skipped=["lodash"],
+            indexed=["express"],
+            already_indexed=["react"],
+            skipped=["some-css-pkg"],
             failed=[("broken-pkg", "parse error")],
             total_symbols=42,
         )
-        assert len(report.indexed) == 2
-        assert report.skipped == ["lodash"]
+        assert report.indexed == ["express"]
+        assert report.already_indexed == ["react"]
+        assert report.skipped == ["some-css-pkg"]
         assert report.failed[0] == ("broken-pkg", "parse error")
         assert report.total_symbols == 42

@@ -24,19 +24,46 @@ class TestIndexCommand:
     def test_index_creates_db(self, runner, tmp_path):
         # Use a fresh copy of the fixtures project layout pointing to a temp dir
         # by invoking with the real fixtures path (db will go into fixtures/.docsoup/)
-        # We just check exit_code and output.
+        # We just check exit_code and that one of the valid output sections appears.
         result = runner.invoke(cli, ["index", str(FIXTURES_ROOT)])
         assert result.exit_code == 0
-        assert "Indexed" in result.output or "Nothing to index" in result.output
+        assert any(section in result.output for section in (
+            "Indexed", "Already indexed", "Skipped", "Nothing to index"
+        ))
 
     def test_index_json_output(self, runner):
         result = runner.invoke(cli, ["index", str(FIXTURES_ROOT), "--json"])
         assert result.exit_code == 0
         data = json.loads(result.output)
         assert "indexed" in data
+        assert "already_indexed" in data
         assert "skipped" in data
         assert "failed" in data
         assert "total_symbols" in data
+
+    def test_index_second_run_shows_already_indexed(self, runner):
+        runner.invoke(cli, ["index", str(FIXTURES_ROOT)])
+        result = runner.invoke(cli, ["index", str(FIXTURES_ROOT)])
+        assert result.exit_code == 0
+        # Second run: previously indexed libs show under "Already indexed"
+        assert "Already indexed" in result.output
+
+    def test_index_second_run_json_already_indexed(self, runner):
+        runner.invoke(cli, ["index", str(FIXTURES_ROOT)])
+        result = runner.invoke(cli, ["index", str(FIXTURES_ROOT), "--json"])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert len(data["already_indexed"]) > 0
+        assert data["indexed"] == []
+
+    def test_index_skipped_shown_separately_from_already_indexed(self, runner):
+        # After a first run the no-source packages are skipped; on second run
+        # the previously-indexed ones are already_indexed, not skipped.
+        result = runner.invoke(cli, ["index", str(FIXTURES_ROOT), "--json"])
+        data = json.loads(result.output)
+        # No package should appear in both already_indexed and skipped.
+        overlap = set(data["already_indexed"]) & set(data["skipped"])
+        assert overlap == set()
 
     def test_index_nonexistent_dir(self, runner):
         result = runner.invoke(cli, ["index", "/nonexistent/path/xyz"])

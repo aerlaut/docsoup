@@ -81,6 +81,7 @@ def index_cmd(project_root: str, force: bool, output_json: bool) -> None:
     if output_json:
         click.echo(_json.dumps({
             "indexed": report.indexed,
+            "already_indexed": report.already_indexed,
             "skipped": report.skipped,
             "failed": [{"name": n, "error": e} for n, e in report.failed],
             "total_symbols": report.total_symbols,
@@ -91,15 +92,19 @@ def index_cmd(project_root: str, force: bool, output_json: bool) -> None:
         click.echo(f"✓ Indexed ({report.total_symbols} symbols):")
         for name in report.indexed:
             click.echo(f"  • {name}")
+    if report.already_indexed:
+        click.echo(f"↷ Already indexed (up to date):")
+        for name in report.already_indexed:
+            click.echo(f"  • {name}")
     if report.skipped:
-        click.echo(f"↷ Skipped (already indexed or no extractable source):")
+        click.echo(f"⊘ Skipped (no extractable source):")
         for name in report.skipped:
             click.echo(f"  • {name}")
     if report.failed:
         click.echo(f"✗ Failed:", err=True)
         for name, err in report.failed:
             click.echo(f"  • {name}: {err}", err=True)
-    if not report.indexed and not report.failed:
+    if not report.indexed and not report.already_indexed and not report.skipped and not report.failed:
         click.echo("Nothing to index.")
 
 

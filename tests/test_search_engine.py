@@ -29,19 +29,28 @@ class TestIndexProject:
 
     def test_skips_packages_without_dts(self, engine):
         report = engine.index_project(FIXTURES_ROOT)
-        # typescript fixture has no .d.ts file
+        # typescript fixture has no .d.ts file — no extractor matches it
         assert "typescript" in report.skipped
+        assert "typescript" not in report.already_indexed
 
     def test_returns_symbol_count(self, engine):
         report = engine.index_project(FIXTURES_ROOT)
         assert report.total_symbols > 0
 
-    def test_incremental_skips_already_indexed(self, engine):
+    def test_incremental_already_indexed(self, engine):
         engine.index_project(FIXTURES_ROOT)
         report2 = engine.index_project(FIXTURES_ROOT)
-        # Second run: everything already indexed should be skipped.
+        # Second run: already-indexed libs go to already_indexed, not skipped.
         assert report2.indexed == []
-        assert len(report2.skipped) > 0
+        assert len(report2.already_indexed) > 0
+
+    def test_incremental_already_indexed_not_in_skipped(self, engine):
+        first = engine.index_project(FIXTURES_ROOT)
+        report2 = engine.index_project(FIXTURES_ROOT)
+        # Packages indexed on the first run must not appear in skipped on the second.
+        for name in first.indexed:
+            assert name not in report2.skipped
+            assert name in report2.already_indexed
 
     def test_force_reindexes(self, engine):
         engine.index_project(FIXTURES_ROOT)
@@ -76,6 +85,7 @@ class TestIndexProject:
     def test_empty_project_returns_empty_report(self, engine, tmp_path):
         report = engine.index_project(tmp_path)
         assert report.indexed == []
+        assert report.already_indexed == []
         assert report.skipped == []
         assert report.failed == []
 
