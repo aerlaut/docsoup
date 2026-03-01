@@ -177,6 +177,96 @@ class TestExtractOtherKinds:
         assert syms["VERSION"].kind == "variable"
 
 
+class TestLocalExportClause:
+    """Symbols declared without `export` but re-exported via `export { A, B }` are extracted."""
+
+    def setup_method(self):
+        import json
+        pkg_json = FIXTURES_DTS / "package.json"
+        pkg_json.write_text(json.dumps({"name": "mylib", "version": "1.0.0", "types": "declarations.d.ts"}))
+        self.extractor = TypeScriptExtractor()
+        self.dep = make_dep("mylib", FIXTURES_DTS)
+
+    def teardown_method(self):
+        pkg_json = FIXTURES_DTS / "package.json"
+        if pkg_json.exists():
+            pkg_json.unlink()
+
+    def _syms_by_name(self):
+        return {s.name: s for s in self.extractor.extract(self.dep)}
+
+    def test_extracts_interface_via_export_clause(self):
+        syms = self._syms_by_name()
+        assert "ServerOptions" in syms
+        assert syms["ServerOptions"].kind == "interface"
+
+    def test_extracts_type_via_export_clause(self):
+        syms = self._syms_by_name()
+        assert "LogLevel" in syms
+        assert syms["LogLevel"].kind == "type"
+
+    def test_extracts_class_via_export_clause(self):
+        syms = self._syms_by_name()
+        assert "Server" in syms
+        assert syms["Server"].kind == "class"
+
+    def test_extracts_function_via_export_clause(self):
+        syms = self._syms_by_name()
+        assert "createServer" in syms
+        assert syms["createServer"].kind == "function"
+
+    def test_jsdoc_preserved_for_export_clause_symbol(self):
+        syms = self._syms_by_name()
+        assert syms["ServerOptions"].docstring is not None
+        assert "Creates a server" in syms["ServerOptions"].docstring
+
+    def test_fqn_uses_dep_name(self):
+        syms = self._syms_by_name()
+        assert syms["Server"].fqn == "mylib:Server"
+
+
+class TestBarrelReExports:
+    """Symbols re-exported via `export { X } from './file'` and `export * from './file'` are followed."""
+
+    def setup_method(self):
+        import json
+        pkg_json = FIXTURES_DTS / "package.json"
+        pkg_json.write_text(json.dumps({"name": "mylib", "version": "1.0.0", "types": "barrel.d.ts"}))
+        self.extractor = TypeScriptExtractor()
+        self.dep = make_dep("mylib", FIXTURES_DTS)
+
+    def teardown_method(self):
+        pkg_json = FIXTURES_DTS / "package.json"
+        if pkg_json.exists():
+            pkg_json.unlink()
+
+    def _syms_by_name(self):
+        return {s.name: s for s in self.extractor.extract(self.dep)}
+
+    def test_follows_named_reexport(self):
+        """export { Server, createServer } from './declarations' is followed."""
+        syms = self._syms_by_name()
+        assert "Server" in syms
+        assert "createServer" in syms
+
+    def test_follows_star_reexport(self):
+        """export * from './utils' is followed."""
+        syms = self._syms_by_name()
+        assert "formatDate" in syms
+        assert "slugify" in syms
+        assert "FormatOptions" in syms
+
+    def test_no_duplicate_symbols(self):
+        """Visited set prevents the same file being processed twice."""
+        all_syms = self.extractor.extract(self.dep)
+        names = [s.name for s in all_syms]
+        assert len(names) == len(set(names))
+
+    def test_fqn_uses_dep_name(self):
+        syms = self._syms_by_name()
+        assert syms["formatDate"].fqn == "mylib:formatDate"
+
+
 class TestAmbientModules:
     """Symbols inside `declare module '...' { ... }` blocks are extracted."""
 
