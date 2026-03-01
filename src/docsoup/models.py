@@ -75,13 +75,16 @@ class IndexReport:
     """Summary of an indexing run."""
 
     indexed: list[str] = field(default_factory=list)
-    """Libraries that were (re-)indexed."""
+    """Libraries that were (re-)indexed in this run."""
+
+    already_indexed: list[str] = field(default_factory=list)
+    """Libraries skipped because their name+version were already present in the index."""
 
     skipped: list[str] = field(default_factory=list)
-    """Libraries skipped because their version was already indexed."""
+    """Libraries skipped because no extractor supports them or they yielded no symbols."""
 
     failed: list[tuple[str, str]] = field(default_factory=list)
     """Libraries that failed to index, as (name, error_message) pairs."""
 
     total_symbols: int = 0
-    """Total number of symbols added across all indexed libraries."""
+    """Total number of symbols added across all indexed libraries in this run."""
