@@ -10,8 +10,10 @@ from pathlib import Path
 import click
 
 from docsoup.discovery.node import NodeDiscoverer
+from docsoup.discovery.python import PythonDiscoverer
 from docsoup.indexing.sqlite_index import SqliteIndex
 from docsoup.parsing.javascript import JavaScriptExtractor
+from docsoup.parsing.python import PythonExtractor
 from docsoup.parsing.typescript import TypeScriptExtractor
 from docsoup.search.engine import SearchEngine
 
@@ -19,9 +21,16 @@ from docsoup.search.engine import SearchEngine
 # Shared helpers
 # ---------------------------------------------------------------------------
 
-def _make_engine(project_root: Path) -> SearchEngine:
-    """Build a SearchEngine wired to the default Node/TS/SQLite stack."""
+def _make_engine(project_root: Path, *, ecosystem: str = "node") -> SearchEngine:
+    """Build a SearchEngine for the given *ecosystem*."""
     db_path = project_root / ".docsoup" / "index.db"
+    if ecosystem == "python":
+        return SearchEngine(
+            discoverer=PythonDiscoverer(),
+            extractors=[PythonExtractor()],
+            index=SqliteIndex(db_path=db_path),
+        )
+    # Default: node
     return SearchEngine(
         discoverer=NodeDiscoverer(),
         extractors=[TypeScriptExtractor(), JavaScriptExtractor()],
@@ -62,20 +71,32 @@ def cli(verbose: bool) -> None:
               help="Re-index libraries that are already up-to-date.")
 @click.option("--json", "output_json", is_flag=True, default=False,
               help="Output results as JSON.")
-def index_cmd(project_root: str, force: bool, output_json: bool) -> None:
+@click.option(
+    "--ecosystem", "-e",
+    type=click.Choice(["node", "python"], case_sensitive=False),
+    default="node",
+    show_default=True,
+    help="Project ecosystem to index.",
+)
+def index_cmd(project_root: str, force: bool, output_json: bool, ecosystem: str) -> None:
     """Index all dependencies of PROJECT_ROOT.
 
-    Reads package.json, resolves node_modules, extracts symbols from TypeScript
-    declaration files (.d.ts) or JavaScript source files, and stores them in
-    .docsoup/index.db inside PROJECT_ROOT.
+    For Node projects: reads package.json, resolves node_modules, extracts
+    symbols from TypeScript declaration files (.d.ts) or JavaScript source files.
+
+    For Python projects: reads pyproject.toml / requirements.txt, resolves the
+    .venv virtual environment, extracts symbols from .pyi stubs or .py sources.
+
+    Symbols are stored in .docsoup/index.db inside PROJECT_ROOT.
 
     \b
     Examples:
         docsoup index .
         docsoup index /path/to/my-app --force
+        docsoup index . --ecosystem python
     """
     root = _resolve_root(project_root)
-    engine = _make_engine(root)
+    engine = _make_engine(root, ecosystem=ecosystem)
     report = engine.index_project(root, force=force)
 
     if output_json:
@@ -124,6 +145,13 @@ def index_cmd(project_root: str, force: bool, output_json: bool) -> None:
               help="Maximum number of results to return.")
 @click.option("--json", "output_json", is_flag=True, default=False,
               help="Output results as JSON.")
+@click.option(
+    "--ecosystem", "-e",
+    type=click.Choice(["node", "python"], case_sensitive=False),
+    default="node",
+    show_default=True,
+    help="Project ecosystem to search.",
+)
 def search_cmd(
     project_root: str,
     query: str,
@@ -131,6 +159,7 @@ def search_cmd(
     kind: str | None,
     limit: int,
     output_json: bool,
+    ecosystem: str,
 ) -> None:
     """Search indexed dependency symbols for QUERY.
 
@@ -139,9 +168,10 @@ def search_cmd(
         docsoup search . "create router"
         docsoup search . "useState" --library react --kind function
         docsoup search . "middleware" --library express --limit 5 --json
+        docsoup search . "session" --ecosystem python --library requests
     """
     root = _resolve_root(project_root)
-    engine = _make_engine(root)
+    engine = _make_engine(root, ecosystem=ecosystem)
     results = engine.search(query, library=library, kind=kind, limit=limit)
 
     if output_json:
@@ -189,16 +219,24 @@ def search_cmd(
 @click.argument("project_root", default=".", metavar="PROJECT_ROOT")
 @click.option("--json", "output_json", is_flag=True, default=False,
               help="Output as JSON.")
-def status_cmd(project_root: str, output_json: bool) -> None:
+@click.option(
+    "--ecosystem", "-e",
+    type=click.Choice(["node", "python"], case_sensitive=False),
+    default="node",
+    show_default=True,
+    help="Project ecosystem to report status for.",
+)
+def status_cmd(project_root: str, output_json: bool, ecosystem: str) -> None:
     """Show which libraries are currently indexed for PROJECT_ROOT.
 
     \b
     Examples:
         docsoup status .
         docsoup status /path/to/my-app --json
+        docsoup status . --ecosystem python
     """
     root = _resolve_root(project_root)
-    engine = _make_engine(root)
+    engine = _make_engine(root, ecosystem=ecosystem)
     libs = engine.status()
 
     if output_json:
