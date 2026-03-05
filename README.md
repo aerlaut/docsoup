@@ -18,7 +18,7 @@ package.json + node_modules/
   DependencyDiscoverer      ← resolves installed packages
         │
         ▼
-  SymbolExtractor           ← Tree-sitter parses .d.ts files
+  SymbolExtractor           ← Tree-sitter parses files
         │
         ▼
   Index (SQLite FTS5)       ← BM25-ranked full-text search
@@ -279,17 +279,3 @@ pytest
 # Run tests with coverage
 pytest --cov
 ```
-
----
-
-## What gets indexed
-
-- Only packages that have TypeScript type definitions (`.d.ts` files) are
-  indexed. The entry point is resolved in order: `types` field in
-  `package.json` → `typings` field → `index.d.ts`.
-- Extracted symbol kinds: `function`, `class` (+ methods), `interface`,
-  `type` alias, `enum`, `variable`/`const`.
-- JSDoc comments and single-line `//` comments are captured as `docstring`
-  and included in the search index.
-- The index covers: symbol name, fully-qualified name, signature, docstring,
-  and full source text.
