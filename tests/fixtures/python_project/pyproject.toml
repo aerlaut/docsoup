@@ -1,0 +1,15 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "my-app"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "requests>=2.28",
+    "click>=8.1",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/my_app"]

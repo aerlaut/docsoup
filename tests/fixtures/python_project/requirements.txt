@@ -1,0 +1,5 @@
+# Core dependencies
+requests==2.28.2
+click>=8.1.0
+# Dev-only (still listed here for the fixture)
+pytest==8.0.0
